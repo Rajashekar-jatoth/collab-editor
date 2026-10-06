@@ -1,10 +1,16 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 
+const COLORS = ['#f44336', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#00bcd4']
+const randomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)]
+const randomName = () => 'User-' + Math.floor(Math.random() * 1000)
+
 function App() {
   const containerRef = useRef(null)
+  const [users, setUsers] = useState([])
+  const decorationsRef = useRef([])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -19,6 +25,10 @@ function App() {
     const ydoc = new Y.Doc()
     const provider = new WebsocketProvider('ws://localhost:1234', 'demo-room', ydoc)
     const ytext = ydoc.getText('monaco')
+
+    const myColor = randomColor()
+    const myName = randomName()
+    provider.awareness.setLocalStateField('user', { name: myName, color: myColor })
 
     let isLocalChange = false
 
@@ -48,19 +58,70 @@ function App() {
       })
     })
 
+    editor.onDidChangeCursorPosition((event) => {
+      const offset = editor.getModel().getOffsetAt(event.position)
+      provider.awareness.setLocalStateField('cursor', { offset })
+    })
+
+    const renderPresence = () => {
+      const states = Array.from(provider.awareness.getStates().entries())
+      const others = states.filter(([clientId]) => clientId !== provider.awareness.clientID)
+
+      setUsers(
+        states.map(([clientId, state]) => ({
+          id: clientId,
+          name: state.user?.name ?? 'Unknown',
+          color: state.user?.color ?? '#888',
+          isMe: clientId === provider.awareness.clientID,
+        }))
+      )
+
+      const model = editor.getModel()
+      const newDecorations = others
+        .filter(([, state]) => state.cursor && state.user)
+        .map(([, state]) => {
+          const pos = model.getPositionAt(state.cursor.offset)
+          return {
+            range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column + 1),
+            options: {
+              className: 'remote-cursor',
+              stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+              inlineClassName: 'remote-cursor-inline',
+            },
+          }
+        })
+
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, newDecorations)
+    }
+
+    provider.awareness.on('change', renderPresence)
+
     provider.on('status', (event) => {
       console.log('WebSocket status:', event.status)
     })
 
     return () => {
       ytext.unobserve(updateEditor)
+      provider.awareness.off('change', renderPresence)
       provider.destroy()
       ydoc.destroy()
       editor.dispose()
     }
   }, [])
 
-  return <div ref={containerRef} style={{ height: '100vh', width: '100vw' }} />
+  return (
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '6px 12px', background: '#1e1e1e', borderBottom: '1px solid #333', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <span style={{ color: '#aaa', fontSize: '13px' }}>Online:</span>
+        {users.map((u) => (
+          <span key={u.id} style={{ color: u.color, fontSize: '13px', fontWeight: 'bold' }}>
+            {u.name}{u.isMe ? ' (you)' : ''}
+          </span>
+        ))}
+      </div>
+      <div ref={containerRef} style={{ flex: 1 }} />
+    </div>
+  )
 }
 
 export default App
