@@ -29,7 +29,8 @@ A real-time collaborative code editor with live text synchronization and presenc
 
 * **Day 5:** Added real-time user presence and awareness using Yjs's Awareness protocol. Implemented live remote cursor tracking and dynamic active user badges.
 
-* **Day 6 (Upcoming):** Room-based session routing (`/room/:id`) to isolate document states per session link.
+- Day 6: Room ID parsed from URL (/room/<id>), auto-generated and redirected if absent. Each room maps to its own Yjs doc via the WebsocketProvider room name. Verified: text syncs within a room, doesn't leak across rooms. Fixed bug where the online-users list stayed empty until the first awareness change (renderPresence wasn't called on startup).
+
 
 * **Day 7 (Upcoming):** Production deployment (Frontend to Vercel/Netlify, WebSocket server to Render/Railway) and edge-case testing.
 

@@ -3,10 +3,15 @@ import * as monaco from 'monaco-editor'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:1234'
+
 const COLORS = ['#f44336', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#00bcd4']
 const randomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)]
 const randomName = () => 'User-' + Math.floor(Math.random() * 1000)
 
+// ---- Room resolution from URL ----
+// /                -> generate a new room id, redirect to /room/<id>
+// /room/<id>       -> join that room
 function getOrCreateRoomId() {
   const path = window.location.pathname
   const match = path.match(/^\/room\/([a-zA-Z0-9-]+)$/)
@@ -39,7 +44,7 @@ function App() {
     })
 
     const ydoc = new Y.Doc()
-    const provider = new WebsocketProvider('ws://localhost:1234', roomId, ydoc)
+    const provider = new WebsocketProvider(WS_URL, roomId, ydoc)
     const ytext = ydoc.getText('monaco')
 
     const myColor = randomColor()
@@ -111,6 +116,7 @@ function App() {
     }
 
     provider.awareness.on('change', renderPresence)
+    renderPresence()
 
     provider.on('status', (event) => {
       console.log('WebSocket status:', event.status)
