@@ -82,9 +82,9 @@ Browser (React + Monaco) <-> WebSocket <-> Node relay (y-websocket) <-> other br
 - Presence (online list, remote cursors) uses the Yjs Awareness protocol.
 
 ## Known limitations
-- - Documents live in server memory only. Tested: after ~20 minutes with no connected users,
+- Documents live in server memory only. Tested: after ~20 minutes with no connected users,
   a room's text was gone (consistent with the free Render tier spinning down when idle).
   Text does survive everyone leaving while the server is awake.
 - Rooms have no authentication: anyone with the link can edit.
-- Remote edits are applied by replacing the full document in the editor, which can
-  disturb the local cursor (planned fix: apply Yjs deltas incrementally).
+- Remote edits are applied by replacing the full document in the editor. No cursor jumping
+  was observed in testing, but applying Yjs deltas incrementally would be more robust.
