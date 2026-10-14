@@ -40,11 +40,22 @@ A real-time collaborative code editor with live text synchronization and presenc
 ---
 
 ## Scope & Limitations
-* **In-Memory State:** Current scope relies on in-memory state relay via WebSocket connections; persistent database storage (Redis/SQL) is omitted by design for speed and simplicity.
+* **Persistence:** Yjs document snapshots are stored in PostgreSQL. Configure `DATABASE_URL` (and `DATABASE_SSL=true` when required by your provider) before starting the backend. The server restores each room before accepting its first WebSocket connection.
 * **Authentication:** Minimal room-link based access without mandatory user authentication.
 
 ## Architecture
 _Fill in on Day 10 — why Yjs over OT, why Monaco, what's deliberately not implemented (auth, full persistence) and why._
+
+## PostgreSQL persistence (Day 7)
+
+The backend creates a `cosync_documents` table automatically on startup. Each room has one row containing a binary Yjs state snapshot; Yjs remains responsible for real-time conflict-free synchronization, while PostgreSQL preserves the document across server restarts.
+
+1. Create a PostgreSQL database with your preferred provider.
+2. In `collab-editor-server`, copy `.env.example` to `.env` and set `DATABASE_URL`. Set `DATABASE_SSL=true` if your provider requires TLS. Do not commit `.env`.
+3. Install dependencies and start the server. The backend exits with an error if `DATABASE_URL` is missing or the database cannot initialize.
+4. Open a room, type some text, stop/restart the backend, and reopen the same room URL to verify that the text is restored.
+
+For Render, add `DATABASE_URL` and (if required by the database provider) `DATABASE_SSL=true` under the backend service's Environment settings. Use the database provider's connection string and keep it private.
 
 ## Running locally
 
@@ -62,7 +73,7 @@ npm install
 npm run dev
 ```
 ## Live demo
-- App: https://collab-editor-liart.vercel.app
+- App: [https://collab-editor-liart.vercel.app](https://collab-editor-liart.vercel.app)
 - Open the app, copy the room link, and open it on a second device to edit together.
 - Backend runs on Render's free tier, so the first connection after ~15 idle minutes can take up to a minute while it wakes up.
 - Rooms are unauthenticated: anyone with the link can edit.
@@ -73,18 +84,18 @@ Browser (React + Monaco) <-> WebSocket <-> Node relay (y-websocket) <-> other br
 - Each room is one Yjs document (a Y.Text), named by the room ID in the URL (/room/<id>).
 - The server only relays updates and holds a copy of each document. It does not resolve conflicts.
 - CRDT (Yjs) instead of Operational Transform: CRDT updates commute, so every client converges
-  to the same text regardless of arrival order, including edits made offline.
-  Verified: edited on a phone in airplane mode and on a laptop, reconnected, and both merged.
+  to the same text regardless of arrival order, including edits made offline.
+  Verified: edited on a phone in airplane mode and on a laptop, reconnected, and both merged.
 - The Monaco <-> Yjs binding is hand-written. The y-monaco library failed to resolve
-  Monaco's import path under Vite, so local edits are pushed into Y.Text via
-  onDidChangeModelContent, and remote changes are applied via ytext.observe, with a flag
-  to prevent echo loops.
+  Monaco's import path under Vite, so local edits are pushed into Y.Text via
+  onDidChangeModelContent, and remote changes are applied via ytext.observe, with a flag
+  to prevent echo loops.
 - Presence (online list, remote cursors) uses the Yjs Awareness protocol.
 
 ## Known limitations
 - Documents live in server memory only. Tested: after ~20 minutes with no connected users,
-  a room's text was gone (consistent with the free Render tier spinning down when idle).
-  Text does survive everyone leaving while the server is awake.
+  a room's text was gone (consistent with the free Render tier spinning down when idle).
+  Text does survive everyone leaving while the server is awake.
 - Rooms have no authentication: anyone with the link can edit.
 - Remote edits are applied by replacing the full document in the editor. No cursor jumping
-  was observed in testing, but applying Yjs deltas incrementally would be more robust.
+  was observed in testing, but applying Yjs deltas incrementally would be more robust.
