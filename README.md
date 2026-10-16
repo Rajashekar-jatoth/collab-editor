@@ -1,39 +1,40 @@
 # CoSync — Real-Time Collaborative Code Editor
 
-CoSync is a browser-based code editor that allows multiple users to edit the same document in real time. It uses Yjs for conflict-free synchronization, Monaco Editor for the coding interface, WebSockets for communication, and PostgreSQL to persist document state across server restarts.
+CoSync is a browser-based code editor where multiple people edit the same document at the same time, from different devices, and see each other's changes and cursors live. Edits made while offline merge after reconnecting, and every room is saved to PostgreSQL so it survives the server restarting.
 
-**Live Demo:** https://collab-editor-liart.vercel.app  
-**Backend:** https://collab-editor-91e2.onrender.com  
-**Repository:** https://github.com/Rajashekar-jatoth/collab-editor
+- **Live demo:** https://collab-editor-liart.vercel.app
+- **Backend health check:** https://collab-editor-91e2.onrender.com
+- **Demo video:** TODO add link here
+- **Repository:** https://github.com/Rajashekar-jatoth/collab-editor
+
+> The backend runs on free tiers. After about 15 idle minutes the server sleeps, and the first visit afterwards can take up to a minute while it wakes up. Open the backend health check first, then the app.
 
 ## Features
 
-- **Real-time collaboration:** Changes synchronize across multiple browser sessions.
-- **Room-based editing:** Each room has a unique URL that users can share.
-- **Live presence:** Displays connected users and supports collaborative awareness features.
-- **Monaco Editor:** Provides a code-editor interface in the browser.
-- **Conflict-free synchronization:** Yjs CRDTs help concurrent edits converge across clients.
-- **Offline-edit merging:** Yjs can merge supported offline edits after reconnection.
-- **Persistent document storage:** PostgreSQL stores binary Yjs document state.
-- **Cloud deployment:** Frontend hosted on Vercel and backend hosted on Render.
+- **Real-time collaboration:** changes synchronize across multiple browsers and devices
+- **Room-based editing:** every document lives at `/room/<id>`, and anyone with the link joins the same document
+- **Live presence:** an online-users list and remote cursor markers
+- **Conflict-free synchronization:** Yjs CRDTs make concurrent edits converge to identical text
+- **Offline-edit merging:** edits made while disconnected merge after reconnecting
+- **Persistent storage:** PostgreSQL stores each room's Yjs document state, so rooms survive the server sleeping or restarting
+- **Cloud deployment:** frontend on Vercel, backend on Render, database on Neon
 
-## Tech Stack
+## Tech stack
 
 | Component | Technology |
 |---|---|
 | Frontend | React, Vite |
 | Code editor | Monaco Editor |
-| Synchronization | Yjs CRDTs |
-| WebSocket provider | `y-websocket` |
+| Synchronization | Yjs (CRDT) |
+| WebSocket provider | y-websocket |
+| Presence | Yjs Awareness |
 | Backend | Node.js, WebSockets |
-| Database | PostgreSQL |
-| Database provider | Neon |
-| Frontend hosting | Vercel |
-| Backend hosting | Render |
+| Database | PostgreSQL (Neon) |
+| Hosting | Vercel (frontend), Render (backend) |
 
 ## Architecture
 
-```text
+```
 User A (Browser)                 User B (Browser)
 React + Monaco                   React + Monaco
        |                                |
@@ -50,36 +51,30 @@ React + Monaco                   React + Monaco
 
 ### How it works
 
-1. A user opens a room URL, such as `/room/<room-id>`.
-2. The frontend connects to the backend using a WebSocket provider.
-3. Yjs synchronizes document changes between connected clients.
-4. The Awareness protocol communicates presence information between users.
-5. The backend stores Yjs document state in PostgreSQL and restores saved state when a room is loaded.
+1. A user opens a room URL such as `/room/<room-id>`. Opening the site without a room creates a new one.
+2. The frontend connects to the backend over a WebSocket.
+3. Yjs synchronizes document changes between everyone in the room.
+4. The Awareness protocol shares each user's name, color and cursor position.
+5. The backend stores the room's Yjs state in PostgreSQL and restores it when the room is loaded.
 
-### Why these technologies?
+### Key technical decisions
 
-- **Yjs instead of Operational Transformation (OT):** Yjs provides CRDT-based synchronization designed to merge concurrent changes.
-- **Monaco Editor:** Provides a familiar code-editing interface in the browser.
-- **WebSockets:** Allow low-latency, bidirectional communication.
-- **PostgreSQL:** Keeps document state in persistent storage rather than relying solely on server memory.
-- **React:** Supports a component-based frontend and room interface.
+**Yjs (CRDT) instead of Operational Transform.** CRDT updates can be applied in any order and every client still ends up with the same text. That makes offline editing and reconnecting safe, and the server does not have to order and transform operations.
 
-## Development Progress
+**A hand-written Monaco-to-Yjs binding.** The standard `y-monaco` library failed to build under Vite because it could not resolve Monaco's internal import path, and several workarounds did not hold. I removed the library and wrote the binding directly:
+- Local edits are read from Monaco's `onDidChangeModelContent` event and applied to the shared `Y.Text`.
+- Remote changes arrive through `ytext.observe` and are written into the editor.
+- A flag stops a remote change from being echoed back as a local one.
 
-- **Day 1:** Set up the React frontend and Node.js WebSocket backend.
-- **Day 2:** Integrated Monaco Editor and implemented local editing.
-- **Days 3–4:** Added bidirectional document synchronization using Yjs and WebSockets; implemented a custom Monaco–Yjs binding.
-- **Day 5:** Added user presence and awareness features.
-- **Day 6:** Implemented room-based URLs and verified that rooms maintain separate documents.
-- **Day 7:** Implemented PostgreSQL persistence, automatic table initialization, document snapshots, and restoration of saved Yjs state.
-- **Day 8:** Deployed the frontend and backend and tested cross-device synchronization.
-- **Final validation:** Verified live collaboration across two browser sessions, confirmed content survived a browser refresh, and queried Neon to confirm a saved document-state record.
+**Why the other technologies**
+- **Monaco Editor:** a familiar, full-featured code editor in the browser.
+- **WebSockets:** low-latency, two-way communication.
+- **PostgreSQL:** document state is kept outside the server's memory, so the free-tier server sleeping does not lose rooms.
+- **React:** a component-based frontend for the room interface.
 
-## PostgreSQL Persistence
+## PostgreSQL persistence
 
-The backend creates a table named `cosync_documents` automatically.
-
-Each room has a database record containing its room ID, binary Yjs state, and last-update timestamp.
+The backend creates a table named `cosync_documents` automatically at startup. Each room has one record containing its room ID, binary Yjs state and last-update time.
 
 | Column | Purpose |
 |---|---|
@@ -93,110 +88,108 @@ Each room has a database record containing its room ID, binary Yjs state, and la
 2. Open the `collab-editor-server` directory.
 3. Copy `.env.example` to `.env`.
 4. Set `DATABASE_URL` to your PostgreSQL connection string.
-5. Set `DATABASE_SSL=true` if required by your database provider.
-6. Install dependencies and start the backend.
+5. Set `DATABASE_SSL=true` if your provider requires it.
 
-**Never commit `.env` or expose database credentials in public repositories.**
+Never commit `.env` or expose database credentials in a public repository.
 
-## Running Locally
+## Project structure
 
-### Prerequisites
+```
+collab-editor/
+├── collab-editor-client/        React + Vite frontend
+│   ├── src/App.jsx              editor, Yjs binding, rooms, presence
+│   ├── vercel.json              rewrites /room/<id> links to the app
+│   └── package.json
+├── collab-editor-server/        Node WebSocket server
+│   ├── server.js                Yjs relay and PostgreSQL persistence
+│   ├── .env.example             environment variables to copy
+│   └── package.json
+└── README.md
+```
 
-- Node.js and npm
-- A PostgreSQL database
-- Git
+## Running locally
 
-### 1. Start the backend
+**Prerequisites:** Node.js and npm, Git, and a PostgreSQL database (a free Neon project works).
 
+**1. Start the backend**
 ```bash
 cd collab-editor-server
 npm install
 ```
-
-Configure your `.env` file, then run:
-
+Create your `.env` file as described above, then:
 ```bash
 npm start
 ```
+The server listens on port 1234 unless the `PORT` environment variable is set.
 
-The backend uses the `PORT` environment variable when supplied by the hosting platform and initializes the PostgreSQL table at startup.
-
-### 2. Start the frontend
-
-Open a second terminal:
-
+**2. Start the frontend** in a second terminal
 ```bash
 cd collab-editor-client
 npm install
-```
-
-Configure the frontend environment variable:
-
-```env
-VITE_WS_URL=ws://localhost:1234
-```
-
-Then run:
-
-```bash
 npm run dev
 ```
+Open the address Vite prints, which redirects to a new room. Open the same room link in another tab or on another device to collaborate.
 
-Open the local URL printed by Vite. For local development, ensure the WebSocket URL matches the port on which the backend is running.
+### Environment variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `DATABASE_URL` | server | PostgreSQL connection string |
+| `DATABASE_SSL` | server | set to `true` if your provider requires TLS |
+| `PORT` | server | optional locally; Render sets it automatically |
+| `VITE_WS_URL` | client | backend WebSocket address. Defaults to `ws://localhost:1234`; in production use `wss://...` |
 
 ## Deployment
 
-- **Frontend:** Vercel
-- **Backend:** Render
 - **Database:** Neon PostgreSQL
+- **Backend (Render):** Web Service with Root Directory `collab-editor-server`, Build Command `npm install`, Start Command `npm start`, and the `DATABASE_URL` environment variable (plus `DATABASE_SSL=true` if required)
+- **Frontend (Vercel):** Root Directory `collab-editor-client`, Vite preset, and the environment variable `VITE_WS_URL=wss://collab-editor-91e2.onrender.com`
 
-The deployed frontend uses the `VITE_WS_URL` environment variable to connect to the hosted backend. For production, configure it as:
+Vite applies environment variables at build time, so set `VITE_WS_URL` before the first deploy and redeploy the frontend after changing it.
 
-```env
-VITE_WS_URL=wss://collab-editor-91e2.onrender.com
-```
+## Testing and verification
 
-Vite environment variables are applied at build time, so redeploy the frontend after changing them.
+There is no automated test suite yet. Behavior was verified manually on the deployed site:
 
-The backend requires `DATABASE_URL` and may require `DATABASE_SSL=true`, depending on the database provider.
-
-## Testing and Verification
-
-The following checks have been completed:
-
-- Two browser sessions joined the same room.
-- Text changes synchronized between the sessions.
-- The online-user list displayed both connected users.
-- Document contents remained after refreshing a browser.
-- The Render backend initialized the PostgreSQL persistence table successfully.
+- Two devices (a laptop and a phone) joined the same room, stayed in sync, and both appeared in the online list.
+- Simultaneous typing on the same line converged to identical text on both devices.
+- Edits made offline on one device merged correctly after reconnecting, with nothing lost.
+- Different rooms stayed isolated from each other.
+- **Persistence after the server slept:** after about 30 minutes with no users, reopening a room cold-started the free Render server, which logged `Restored saved Yjs state` for that room, and the text was intact.
+- Before PostgreSQL was added, the same idle test lost the room's text, which confirmed the need for the database.
 - A Neon SQL query returned a non-empty saved Yjs state for a live room.
 
-These tests validate the core collaborative editing and persistence workflow.
+## Known limitations
 
-## Known Limitations
+- **Cold starts:** the free Render server sleeps after about 15 idle minutes and the free Neon database sleeps after about 5, so the first load after a long break can take up to a minute.
+- **No authentication or authorization:** anyone with a room link can join and edit that room. There are no private rooms or roles.
+- **Basic persistence:** the backend stores the current Yjs state per room. Retention, backups and version history are not implemented.
+- **Editor update strategy:** the custom binding applies remote changes by replacing the editor's text. No cursor jumping was observed in testing, but applying Yjs deltas incrementally would be more robust.
+- **Random display names:** each session gets a random name and color.
+- **Manual testing only:** there are no automated tests, rate limiting or monitoring.
 
-- **No authentication:** Anyone who obtains a room URL may be able to join and edit that room.
-- **No authorization system:** The application does not currently provide role-based access or private-room permissions.
-- **Basic document persistence:** The backend stores Yjs state snapshots. More advanced retention, backup, and recovery policies have not been implemented.
-- **Free-tier hosting:** The Render service may sleep during periods of inactivity, increasing the initial connection time.
-- **Editor update strategy:** The custom Monaco–Yjs binding applies remote changes by replacing document content. Incremental delta application could improve cursor stability and performance.
-- **Production hardening:** Rate limiting, stronger access controls, monitoring, and automated integration tests are potential future improvements.
-
-## Future Enhancements
+## Future enhancements
 
 - User authentication and private rooms
 - Room ownership and permission controls
-- Improved incremental editor updates
-- Language selection and syntax configuration
-- Automated tests and monitoring
+- Incremental editor updates from Yjs deltas
+- Language selection and syntax modes
+- Automated multi-client tests and monitoring
 - Better connection and reconnection feedback
+
+## Development log
+
+- **Day 1:** React frontend and Node.js WebSocket backend running standalone
+- **Day 2:** Monaco Editor running as a single-user editor
+- **Days 3-4:** real-time synchronization with Yjs; replaced the failing `y-monaco` library with a hand-written Monaco-Yjs binding
+- **Day 5:** user presence and awareness
+- **Day 6:** room-based URLs with a separate document per room
+- **Day 7:** PostgreSQL persistence with automatic table creation and restoration of saved Yjs state
+- **Day 8:** deployment to Vercel and Render, tested across devices
+- **Day 9:** conflict, offline-merge and idle-persistence testing
 
 ## Author
 
-**Rajashekar Jatoth**
+Rajashekar Jatoth — [github.com/Rajashekar-jatoth](https://github.com/Rajashekar-jatoth)
 
-GitHub: https://github.com/Rajashekar-jatoth
-
----
-
-*CoSync is a learning and portfolio project demonstrating real-time collaboration, CRDT-based synchronization, WebSocket communication, and persistent storage.*
+CoSync is a learning and portfolio project demonstrating real-time collaboration, CRDT-based synchronization, WebSocket communication and persistent storage.
