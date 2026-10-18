@@ -4,7 +4,7 @@ CoSync is a browser-based code editor where multiple people edit the same docume
 
 - **Live demo:** https://collab-editor-liart.vercel.app
 - **Backend health check:** https://collab-editor-91e2.onrender.com
-- - **Demo video:** https://youtu.be/MBMYt0B_vs8
+- **Demo video:** https://youtu.be/MBMYt0B_vs8
 - **Repository:** https://github.com/Rajashekar-jatoth/collab-editor
 
 > The backend runs on free tiers. After about 15 idle minutes the server sleeps, and the first visit afterwards can take up to a minute while it wakes up. Open the backend health check first, then the app.
